@@ -58,15 +58,18 @@ If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process Bypass`
 
 ## Linux/macOS setup
 
-Install Python 3.10, then from the project root:
+Install Python 3.12, then from the project root:
 
 ```bash
-python3.10 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
+python --version
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+In VS Code, select `.venv` with **Python: Select Interpreter** if imports still appear unresolved. The workspace default points to `.venv`, but VS Code keeps an interpreter already selected for the workspace until you change it.
 
 Open <http://127.0.0.1:8000>. API docs are at <http://127.0.0.1:8000/docs>. TensorFlow wheel support varies by operating system and hardware; install the matching TensorFlow 2.12 wheel if the pinned package cannot be installed on your platform.
 

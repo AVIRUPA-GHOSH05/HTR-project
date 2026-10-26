@@ -33,6 +33,7 @@ class ModelRunner:
         try:
             # Import only when a checkpoint exists so the API/PDF stay usable
             # in environments where TensorFlow is not installed yet.
+            os.environ["TF_USE_LEGACY_KERAS"] = "1"
             import tensorflow as tf
 
             tf.compat.v1.disable_eager_execution()

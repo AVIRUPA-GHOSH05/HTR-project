@@ -186,11 +186,6 @@ class DataLoader:
         text_tensor =tf.data.Dataset.from_tensor_slices(self.gtTexts)
         return tf.data.Dataset.zip((img_tensor, text_tensor))
     
-    def getTfSequence(self,):
-        if self.gtTexts == None:
-            self._getData()
-        return IAMSequence(self.imgs, self.gtTexts, self.batchSize, self.charList)
-
     def tensorBatchtoSparse(self, batch):
         """ Convert ground truth texts into sparse tensor for ctc_loss """
         indices = []
@@ -214,23 +209,3 @@ class DataLoader:
                 indices.append([batchElement, i])
                 values.append(label)
         return (indices, values, shape)
-
-if __name__ == "__main__":
-    from tf2Custom import DecoderType, Model
-    loader = DataLoader(FilePaths.fnTrain, Model.batchSize,
-                    Model.imgSize, Model.maxTextLen, load_aug=True)
-    loader.trainSet()
-    batch = loader.getNext()
-    # print(batch.gtTexts)
-    # print(len(batch.gtTexts))
-    # print(toSparse(batch.gtTexts, loader.charList))
-    # dataset = loader.getTfSequence()
-    # for i in range(2):
-    #     batch = dataset.__getitem__(i)
-    #     print(batch)
-    #     print(batch[1].shape)
-
-    dataset = tf.data.Dataset.from_generator(loader.tf_gen, output_types=(tf.float64, tf.string))
-    # dataset = loader.getTfDataSet()
-    for batch in dataset.take(2):
-        print(batch)

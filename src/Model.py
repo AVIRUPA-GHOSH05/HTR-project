@@ -17,7 +17,7 @@ class DecoderType:
 class Model:
     # Model Constants
     batchSize = 10 # 50
-    imgSize = (800, 64)
+    imgSize = (800, 32)
     maxTextLen = 100
 
     def __init__(self, charList, decoderType=DecoderType.BestPath, mustRestore=False):
@@ -27,20 +27,20 @@ class Model:
         self.snapID = 0
 
 
-        # input image batch
         tf.compat.v1.disable_eager_execution()
-        self.inputImgs = tf.compat.v1.placeholder(tf.float32, shape=(None, Model.imgSize[0], Model.imgSize[1]))
+        self.isTrain = tf.compat.v1.placeholder(tf.bool, name='is_train')
+        self.inputImgs = tf.compat.v1.placeholder(
+            tf.float32, shape=(None, None, Model.imgSize[1]))
 
         # setup CNN, RNN and CTC
         self.setupCNN()
         self.setupRNN()
         self.setupCTC()
 
-        # setup optimizer to train NN
-
         self.batchesTrained = 0
-        self.learningRate = tf.compat.v1.placeholder(tf.float32, shape=[])
-        self.optimizer = tf.compat.v1.train.RMSPropOptimizer(self.learningRate).minimize(self.loss)
+        updateOps = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(updateOps):
+            self.optimizer = tf.compat.v1.train.AdamOptimizer().minimize(self.loss)
 
         # Initialize TensorFlow
         (self.sess, self.saver) = self.setupTF()
@@ -51,102 +51,46 @@ class Model:
         self.merge = tf.compat.v1.summary.merge([self.training_loss_summary])  # Tensorboard: Merge
 
     def setupCNN(self):
-        """ Create CNN layers and return output of these layers """
-
+        """Create the CNN layers used by the pretrained checkpoint."""
         cnnIn4d = tf.expand_dims(input=self.inputImgs, axis=3)
+        kernelVals = [5, 5, 3, 3, 3]
+        featureVals = [1, 32, 64, 128, 128, 256]
+        poolVals = [(2, 2), (2, 2), (1, 2), (1, 2), (1, 2)]
 
-        # First Layer: Conv (5x5) + Pool (2x2) - Output size: 400 x 32 x 64
-        with tf.name_scope('Conv_Pool_1'):
-            kernel = tf.Variable(
-                tf.random.truncated_normal([5, 5, 1, 64], stddev=0.1))
-            conv = tf.nn.conv2d(
-                cnnIn4d, kernel, padding='SAME', strides=(1, 1, 1, 1))
-            learelu = tf.nn.leaky_relu(conv, alpha=0.01)
-            pool = tf.nn.max_pool(learelu, (1, 2, 2, 1), (1, 2, 2, 1), 'VALID')
-
-        # Second Layer: Conv (5x5) + Pool (1x2) - Output size: 400 x 16 x 128
-        with tf.name_scope('Conv_Pool_2'):
+        pool = cnnIn4d
+        for i in range(len(poolVals)):
             kernel = tf.Variable(tf.random.truncated_normal(
-                [5, 5, 64, 128], stddev=0.1))
+                [kernelVals[i], kernelVals[i], featureVals[i], featureVals[i + 1]],
+                stddev=0.1))
             conv = tf.nn.conv2d(
-                pool, kernel, padding='SAME', strides=(1, 1, 1, 1))
-            learelu = tf.nn.leaky_relu(conv, alpha=0.01)
-            pool = tf.nn.max_pool(learelu, (1, 1, 2, 1), (1, 1, 2, 1), 'VALID')
+                input=pool, filters=kernel, padding='SAME', strides=(1, 1, 1, 1))
+            convNorm = tf.compat.v1.layers.batch_normalization(
+                conv, training=self.isTrain)
+            relu = tf.nn.relu(convNorm)
+            pool = tf.nn.max_pool2d(
+                input=relu,
+                ksize=(1, poolVals[i][0], poolVals[i][1], 1),
+                strides=(1, poolVals[i][0], poolVals[i][1], 1),
+                padding='VALID')
 
-        # Third Layer: Conv (3x3) + Pool (2x2) + Simple Batch Norm - Output size: 200 x 8 x 128
-        with tf.name_scope('Conv_Pool_BN_3'):
-            kernel = tf.Variable(tf.random.truncated_normal(
-                [3, 3, 128, 128], stddev=0.1))
-            conv = tf.nn.conv2d(
-                pool, kernel, padding='SAME', strides=(1, 1, 1, 1))
-            mean, variance = tf.nn.moments(conv, axes=[0])
-            batch_norm = tf.nn.batch_normalization(
-                conv, mean, variance, offset=None, scale=None, variance_epsilon=0.001)
-            learelu = tf.nn.leaky_relu(batch_norm, alpha=0.01)
-            pool = tf.nn.max_pool(learelu, (1, 2, 2, 1), (1, 2, 2, 1), 'VALID')
-
-        # Fourth Layer: Conv (3x3) - Output size: 200 x 8 x 256
-        with tf.name_scope('Conv_4'):
-            kernel = tf.Variable(tf.random.truncated_normal(
-                [3, 3, 128, 256], stddev=0.1))
-            conv = tf.nn.conv2d(
-                pool, kernel, padding='SAME', strides=(1, 1, 1, 1))
-            learelu = tf.nn.leaky_relu(conv, alpha=0.01)
-
-        # Fifth Layer: Conv (3x3) + Pool(2x2) - Output size: 100 x 4 x 256
-        with tf.name_scope('Conv_Pool_5'):
-            kernel = tf.Variable(tf.random.truncated_normal(
-                [3, 3, 256, 256], stddev=0.1))
-            conv = tf.nn.conv2d(
-                learelu, kernel, padding='SAME', strides=(1, 1, 1, 1))
-            learelu = tf.nn.leaky_relu(conv, alpha=0.01)
-            pool = tf.nn.max_pool(learelu, (1, 2, 2, 1), (1, 2, 2, 1), 'VALID')
-
-        # Sixth Layer: Conv (3x3) + Pool(1x2) + Simple Batch Norm - Output size: 100 x 2 x 512
-        with tf.name_scope('Conv_Pool_BN_6'):
-            kernel = tf.Variable(tf.random.truncated_normal(
-                [3, 3, 256, 512], stddev=0.1))
-            conv = tf.nn.conv2d(
-                pool, kernel, padding='SAME', strides=(1, 1, 1, 1))
-            mean, variance = tf.nn.moments(conv, axes=[0])
-            batch_norm = tf.nn.batch_normalization(
-                conv, mean, variance, offset=None, scale=None, variance_epsilon=0.001)
-            learelu = tf.nn.leaky_relu(batch_norm, alpha=0.01)
-            pool = tf.nn.max_pool(learelu, (1, 1, 2, 1), (1, 1, 2, 1), 'VALID')
-
-        # Seventh Layer: Conv (3x3) + Pool (1x2) - Output size: 100 x 1 x 512
-        with tf.name_scope('Conv_Pool_7'):
-            kernel = tf.Variable(tf.random.truncated_normal(
-                [3, 3, 512, 512], stddev=0.1))
-            conv = tf.nn.conv2d(
-                pool, kernel, padding='SAME', strides=(1, 1, 1, 1))
-            learelu = tf.nn.leaky_relu(conv, alpha=0.01)
-            pool = tf.nn.max_pool(learelu, (1, 1, 2, 1), (1, 1, 2, 1), 'VALID')
-
-            self.cnnOut4d = pool
+        self.cnnOut4d = pool
 
     def setupRNN(self):
-        """ Create RNN layers and return output of these layers """
-        # Collapse layer to remove dimension 100 x 1 x 512 --> 100 x 512 on axis=2
+        """Create the RNN layers used by the pretrained checkpoint."""
         rnnIn3d = tf.squeeze(self.cnnOut4d, axis=[2])
-
-        # 2 layers of LSTM cell used to build RNN
-        numHidden = 512
+        numHidden = 256
         cells = [tf.compat.v1.nn.rnn_cell.LSTMCell(
-            num_units=numHidden, state_is_tuple=True, name='basic_lstm_cell') for _ in range(2)]
+            num_units=numHidden, state_is_tuple=True) for _ in range(2)]
         stacked = tf.compat.v1.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=True)
-        # Bi-directional RNN
-        # BxTxF -> BxTx2H
-        ((forward, backward), _) = tf.compat.v1.nn.bidirectional_dynamic_rnn(
+        (forwardBackward, _) = tf.compat.v1.nn.bidirectional_dynamic_rnn(
             cell_fw=stacked, cell_bw=stacked, inputs=rnnIn3d, dtype=rnnIn3d.dtype)
-
-        # BxTxH + BxTxH -> BxTx2H -> BxTx1X2H
+        forward, backward = forwardBackward
         concat = tf.expand_dims(tf.concat([forward, backward], 2), 2)
-
-        # Project output to chars (including blank): BxTx1x2H -> BxTx1xC -> BxTxC
         kernel = tf.Variable(tf.random.truncated_normal(
             [1, 1, numHidden * 2, len(self.charList) + 1], stddev=0.1))
-        self.rnnOut3d = tf.squeeze(tf.nn.atrous_conv2d(value=concat, filters=kernel, rate=1, padding='SAME'), axis=[2])
+        self.rnnOut3d = tf.squeeze(
+            tf.nn.atrous_conv2d(value=concat, filters=kernel, rate=1, padding='SAME'),
+            axis=[2])
 
     def setupCTC(self):
         """ Create CTC loss and decoder and return them """
@@ -236,14 +180,14 @@ class Model:
 
         return (indices, values, shape)
 
-    def decoderOutputToText(self, ctcOutput):
+    def decoderOutputToText(self, ctcOutput, batchSize):
         """ Extract texts from output of CTC decoder """
         # Contains string of labels for each batch element
-        encodedLabelStrs = [[] for i in range(Model.batchSize)]
+        encodedLabelStrs = [[] for i in range(batchSize)]
         # Word beam search: label strings terminated by blank
         if self.decoderType == DecoderType.WordBeamSearch:
             blank = len(self.charList)
-            for b in range(Model.batchSize):
+            for b in range(batchSize):
                 for label in ctcOutput[b]:
                     if label == blank:
                         break
@@ -252,8 +196,6 @@ class Model:
         else:
             # Ctc returns tuple, first element is SparseTensor
             decoded = ctcOutput[0][0]
-            # Go over all indices and save mapping: batch -> values
-            idxDict = {b : [] for b in range(Model.batchSize)}
             for (idx, idx2d) in enumerate(decoded.indices):
                 label = decoded.values[idx]
                 batchElement = idx2d[0]  # index according to [b,t]
@@ -264,10 +206,15 @@ class Model:
     def trainBatch(self, batch, batchNum):
         """ Feed a batch into the NN to train it """
         sparse = self.toSpare(batch.gtTexts)
-        rate = 0.01 if self.batchesTrained < 10 else (
-            0.001 if self.batchesTrained < 2750 else 0.001)
         evalList = [self.merge, self.optimizer, self.loss]
-        feedDict = {self.inputImgs: batch.imgs, self.gtTexts: sparse, self.seqLen: [Model.maxTextLen] * Model.batchSize, self.learningRate: rate}
+        batchSize = len(batch.imgs)
+        sequenceLength = batch.imgs[0].shape[0] // 4
+        feedDict = {
+            self.inputImgs: batch.imgs,
+            self.gtTexts: sparse,
+            self.seqLen: [sequenceLength] * batchSize,
+            self.isTrain: True,
+        }
         (loss_summary, _, lossVal) = self.sess.run(evalList, feedDict)
         # Tensorboard: Add loss_summary to writer
         self.writer.add_summary(loss_summary, batchNum)
@@ -277,11 +224,14 @@ class Model:
     def return_rnn_out(self, batch, write_on_csv=False):
         """Only return rnn_out prediction value without decoded"""
         numBatchElements = len(batch.imgs)
-        decoded, rnnOutput = self.sess.run([self.decoder, self.ctcIn3dTBC],
-                                {self.inputImgs: batch.imgs, self.seqLen: [Model.maxTextLen] * numBatchElements})
-
-        decoded = rnnOutput
-        print(decoded.shape)
+        sequenceLength = batch.imgs[0].shape[0] // 4
+        rnnOutput = self.sess.run(
+            self.ctcIn3dTBC,
+            {
+                self.inputImgs: batch.imgs,
+                self.seqLen: [sequenceLength] * numBatchElements,
+                self.isTrain: False,
+            })
 
         if write_on_csv:
             s = rnnOutput.shape
@@ -293,12 +243,17 @@ class Model:
                 csv += '\n'
             open('mat_0.csv', 'w').write(csv)
 
-        return decoded[:,0,:].reshape(100,80)
+        return rnnOutput[:, 0, :]
 
     def inferBatch(self, batch):
         """ Feed a batch into the NN to recognize texts """
         numBatchElements = len(batch.imgs)
-        feedDict = {self.inputImgs: batch.imgs, self.seqLen: [Model.maxTextLen] * numBatchElements}
+        sequenceLength = batch.imgs[0].shape[0] // 4
+        feedDict = {
+            self.inputImgs: batch.imgs,
+            self.seqLen: [sequenceLength] * numBatchElements,
+            self.isTrain: False,
+        }
         evalRes = self.sess.run([self.decoder, self.ctcIn3dTBC], feedDict)
         decoded = evalRes[0]
         # # Dump RNN output to .csv file
@@ -313,7 +268,7 @@ class Model:
         #     csv += '\n'
         # open('mat_0.csv', 'w').write(csv)
 
-        texts = self.decoderOutputToText(decoded)
+        texts = self.decoderOutputToText(decoded, numBatchElements)
         return texts
 
     def save(self):
