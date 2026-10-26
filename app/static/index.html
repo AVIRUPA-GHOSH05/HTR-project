@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6f4">
+  <title>Handwriting AI</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar"><a class="brand" href="/" aria-label="Handwriting AI home"><span class="brand-mark">H</span><span>ink<span class="brand-light">wise</span></span></a><span class="top-note"><span class="status-dot"></span> Handwriting, made readable</span></header>
+    <section class="hero"><p class="eyebrow">YOUR WORDS, DIGITIZED</p><h1>Turn handwriting<br><span>into clear text.</span></h1><p class="intro">Upload a handwritten line and let AI do the reading. Review, edit, then take your text anywhere.</p></section>
+    <section class="workspace" aria-label="Handwriting recognition">
+      <div class="panel upload-panel"><div class="panel-heading"><div><p class="step">STEP 01</p><h2>Add an image</h2></div><span class="panel-icon" aria-hidden="true">↥</span></div>
+        <input id="file-input" type="file" accept="image/png,image/jpeg,image/bmp" hidden>
+        <button class="dropzone" id="dropzone" type="button" aria-label="Choose or drop an image">
+          <span class="upload-icon" aria-hidden="true">↑</span><strong>Drop your image here</strong><span>or <span class="browse">browse files</span></span><small>PNG, JPG or BMP · up to 10 MB</small>
+        </button>
+        <div class="preview-wrap" id="preview-wrap" hidden><img id="preview" alt="Selected handwriting preview"><button id="remove-image" class="remove-image" type="button" aria-label="Remove image">×</button><span id="file-name" class="file-name"></span></div>
+        <button id="recognize" class="primary-button" type="button" disabled><span id="button-label">Recognize handwriting</span><span id="spinner" class="spinner" hidden></span><span aria-hidden="true">→</span></button>
+        <p class="privacy-note"><span aria-hidden="true">♢</span> Your image is processed for recognition only.</p>
+      </div>
+      <div class="panel result-panel"><div class="panel-heading"><div><p class="step">STEP 02</p><h2>Your transcription</h2></div><span class="panel-icon result-icon" aria-hidden="true">Aa</span></div>
+        <label class="sr-only" for="result">Recognized text</label><textarea id="result" placeholder="Your recognized text will appear here…" spellcheck="true"></textarea>
+        <p id="message" class="message" role="status" aria-live="polite">Ready when you are. Add an image to get started.</p>
+        <div class="actions"><button id="copy" class="secondary-button" type="button"><span aria-hidden="true">▢</span> Copy text</button><button id="clear" class="secondary-button" type="button"><span aria-hidden="true">↺</span> Clear</button><button id="pdf" class="pdf-button" type="button"><span aria-hidden="true">↓</span> Download PDF</button></div>
+      </div>
+    </section>
+    <footer><span>Made for the words worth keeping.</span><span>Powered by handwritten text recognition</span></footer>
+  </main>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
