@@ -42,32 +42,17 @@ The TensorFlow 2 training/inference scripts in the upstream source are not used:
 - `GET /health` for model availability and `POST /download-pdf` for ReportLab PDF generation.
 - API and PDF tests, including the missing-weights response.
 
-## Windows PowerShell setup
+## Setup and start (Bash)
 
-Use Python 3.10 (TensorFlow 2.12 supports this runtime). From the project root:
-
-```powershell
-py -3.10 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process Bypass` in that terminal and activate again.
-
-## Linux/macOS setup
-
-Install Python 3.12, then from the project root:
+Install Python 3.12. From the project root, run:
 
 ```bash
 python3.12 -m venv .venv
-source .venv/bin/activate
-python --version
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+The first two lines create the project environment and install its dependencies. When the server is running, open <http://127.0.0.1:8000>. To start it again later, stop any existing server with **Ctrl+C** and run the last line from the project root. Binding to `0.0.0.0` makes the app reachable through a forwarded development-container port.
 
 In VS Code, select `.venv` with **Python: Select Interpreter** if imports still appear unresolved. The workspace default points to `.venv`, but VS Code keeps an interpreter already selected for the workspace until you change it.
 
